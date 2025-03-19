@@ -3,7 +3,7 @@ import os
 import asyncio
 from datetime import datetime
 from config.constants import GRANT_PROGRAMS
-from GrantRAG.utils import save_session_state
+from utils import save_session_state
 from typing import Dict, Any
 import time
 
