@@ -1,6 +1,6 @@
 import streamlit as st
 from typing import Dict, Any
-from GrantRAG.config.constants import GRANT_PROGRAMS
+from config.constants import GRANT_PROGRAMS
 
 def render_settings():
     """Render the settings interface with program management options"""
