@@ -1,5 +1,5 @@
 openai>=1.0.0
-chromadb>=0.4.22
+supabase>=2.3.0
 pypdf>=3.17.1
 openpyxl>=3.1.2
 python-docx>=1.0.1
@@ -7,4 +7,5 @@ diskcache>=5.6.3
 python-dotenv>=1.0.0
 asyncio>=3.4.3
 streamlit>=1.32.0
-pandas>=2.2.0 
+pandas>=2.2.0
+pgvector>=0.2.5 

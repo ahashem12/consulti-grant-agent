@@ -14,9 +14,8 @@ from openpyxl import load_workbook
 import docx
 from dotenv import load_dotenv
 
-# Database and embeddings
-import chromadb
-from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
+# Vector store
+from utils.vector_store import SupabaseVectorStore
 
 # Caching
 from diskcache import Cache as PersistentCache
@@ -39,7 +38,7 @@ if not openai_key:
 
 def sanitize_name(name: str) -> str:
     """
-    Sanitize a name to be used as a ChromaDB collection name.
+    Sanitize a name to be used as a collection name.
     Rules:
     1. Contains 3-63 characters
     2. Starts and ends with alphanumeric
@@ -85,14 +84,8 @@ class ProjectRAG:
         # Sanitize collection name
         collection_name = sanitize_name(project_name)
         
-        # Set up the ChromaDB
-        self.db_path = f"./chromadb_storage/{collection_name}"
-        os.makedirs(self.db_path, exist_ok=True)
-        self.chroma_client = chromadb.PersistentClient(path=self.db_path)
-        self.collection = self.chroma_client.get_or_create_collection(
-            name=collection_name,
-            embedding_function=OpenAIEmbeddingFunction(api_key=openai_key)
-        )
+        # Set up the vector store
+        self.vector_store = SupabaseVectorStore(collection_name, openai_key)
         
         # Caching
         self.cache = PersistentCache(cache_dir=f"./cache/{collection_name}", ttl=3600)
@@ -275,25 +268,29 @@ class ProjectRAG:
                 print(f"[WARN] No chunks created for: {file_path}")
                 return False
                 
-            # Add chunks to the database
+            # Prepare documents for vector store
+            documents = []
             for i, chunk in enumerate(chunks):
                 chunk_id = f"{sanitize_name(file_name)}_{i}"
                 chunk_metadata = metadata.copy()
                 chunk_metadata["chunk_index"] = i
                 chunk_metadata["total_chunks"] = len(chunks)
                 
-                # First try to delete existing chunk if it exists
-                try:
-                    self.collection.delete(ids=[chunk_id])
-                except:
-                    pass
-                    
-                # Add the new chunk
-                self.collection.add(
-                    ids=[chunk_id],
-                    documents=[chunk],
-                    metadatas=[chunk_metadata]
-                )
+                documents.append({
+                    "id": chunk_id,
+                    "content": chunk,
+                    "metadata": chunk_metadata
+                })
+                
+            # Delete existing chunks for this file
+            existing_chunks = [doc["id"] for doc in documents]
+            await self.vector_store.delete_documents(existing_chunks)
+            
+            # Add new chunks to vector store
+            success = await self.vector_store.add_documents(documents)
+            if not success:
+                print(f"[ERROR] Failed to add chunks to vector store: {file_path}")
+                return False
                 
             # Update metadata and stats
             self.ingestion_metadata[file_path] = mod_time
@@ -390,32 +387,19 @@ class ProjectRAG:
                     print(f"[DEBUG] Using cached chunks for query: {query}")
                 return cached
                 
-            # Query the collection
-            results = self.collection.query(
-                query_texts=[query], 
-                n_results=n_results, 
-                include=["documents", "metadatas", "distances"]
-            )
+            # Query the vector store
+            results = await self.vector_store.query(query, n_results=n_results)
             
-            if not results["documents"] or not results["documents"][0]:
+            if not results:
                 return []
                 
-            # Format the results with metadata
-            retrieved = []
-            for i, doc in enumerate(results["documents"][0]):
-                item = {
-                    "content": doc,
-                    "metadata": results["metadatas"][0][i] if results["metadatas"] else {},
-                    "relevance_score": results["distances"][0][i] if results["distances"] else None
-                }
-                retrieved.append(item)
-                
             # Cache the results
-            self.cache.set(query_hash, retrieved)
+            self.cache.set(query_hash, results)
             
             if DEBUG:
-                print(f"[DEBUG] Found {len(retrieved)} chunks for query: {query}")
-            return retrieved
+                print(f"[DEBUG] Found {len(results)} chunks for query: {query}")
+            return results
+            
         except Exception as e:
             print(f"[ERROR] Error retrieving data for '{query}': {e}")
             return []
