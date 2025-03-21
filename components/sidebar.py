@@ -124,21 +124,14 @@ def render_sidebar():
         storage = st.session_state.grant_system.storage
         bucket_contents = storage.supabase.storage.from_(storage.storage_bucket).list()
         
-        # For debugging
-        st.sidebar.markdown("#### Debug: Bucket Contents")
-        st.sidebar.json(bucket_contents)
-        
         # Extract directory names from bucket contents
-        available_projects = [item['name'] for item in bucket_contents]
+        available_projects = [item['name'] for item in bucket_contents if '.' not in item['name']] 
     except Exception as e:
         st.sidebar.error(f"Error loading projects: {str(e)}")
     
     if not available_projects:
         st.sidebar.warning("No projects found in storage bucket")
     else:
-        st.sidebar.markdown("#### Available Projects")
-        st.sidebar.write(available_projects)
-        
         # Project selection
         selected_projects = st.sidebar.multiselect(
             "Select projects to analyze",

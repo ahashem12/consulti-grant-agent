@@ -296,46 +296,44 @@ class ProjectStorage:
             print(f"[ERROR] Failed to update file: {e}")
             return False
 
-    async def list_bucket_files(self, prefix: str = "", depth: int = 0) -> List[Dict[str, Any]]:
+    async def list_bucket_files(self, prefix: str = "") -> List[Dict[str, Any]]:
         """
         List all files in the storage bucket recursively, optionally filtered by prefix
         
         Args:
             prefix: Optional prefix to filter files (e.g. project ID)
-            depth: Current recursion depth (for debugging)
             
         Returns:
             List of file information
         """
         try:
             all_files = []
-            indent = "  " * depth
-            print(f"{indent}[DEBUG] Entering list_bucket_files with prefix: '{prefix}' (depth: {depth})")
             
             # Get initial list of files/folders
-            items = self.supabase.storage.from_(self.storage_bucket).list(path=prefix)
-            print(f"{indent}[DEBUG] Found {len(items)} items at prefix '{prefix}'")
+            items = self.supabase.storage.from_(self.storage_bucket).list(prefix)
+            print(f"[DEBUG] Listing contents with prefix '{prefix}': {[item['name'] for item in items]}")
             
             for item in items:
                 item_name = item['name']
-                print(f"{indent}[DEBUG] Processing item: {item_name}")
+                # Construct the full path by combining the prefix with the item name
+                full_path = f"{prefix}/{item_name}" if prefix else item_name
                 
                 # If the item name contains a period, it's a file
                 if '.' in os.path.basename(item_name):
-                    print(f"{indent}[DEBUG] Found file: {item_name}")
+                    print(f"[DEBUG] Found file: {full_path}")
+                    # Update the item's name to include the full path
+                    item['name'] = full_path
                     all_files.append(item)
                 else:
-                    # It's a directory, recursively list its contents
-                    new_prefix = f"{prefix}/{item_name}" if prefix else item_name
-                    print(f"{indent}[DEBUG] Found directory: {item_name}, recursing with prefix: {new_prefix}")
-                    subfolder_files = await self.list_bucket_files(prefix=new_prefix, depth=depth + 1)
+                    # It's a directory, recursively list its contents using the full path as the new prefix
+                    print(f"[DEBUG] Found directory: {full_path}")
+                    subfolder_files = await self.list_bucket_files(full_path)
                     all_files.extend(subfolder_files)
             
-            print(f"{indent}[DEBUG] Exiting list_bucket_files for prefix '{prefix}' with {len(all_files)} total files")
             return all_files
             
         except Exception as e:
-            print(f"{indent}[ERROR] Failed to list bucket files for prefix '{prefix}': {e}")
+            print(f"[ERROR] Failed to list bucket files: {e}")
             return []
 
     async def get_bucket_file(self, file_path: str) -> Optional[bytes]:
