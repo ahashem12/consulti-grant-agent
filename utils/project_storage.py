@@ -8,6 +8,8 @@ class ProjectStorage:
         """Initialize the project storage system"""
         self.project_id = None
         self.storage_bucket = "project-files"  # Name of the storage bucket
+        self.supabase = supabase  # Expose supabase client
+        print(f"[INFO] Using storage bucket: {self.storage_bucket}")
 
     async def create_project(self, project_name: str, metadata: Dict[str, Any] = None) -> str:
         """
@@ -21,7 +23,7 @@ class ProjectStorage:
             Project ID
         """
         try:
-            result = supabase.table('projects').insert({
+            result = self.supabase.table('projects').insert({
                 'name': project_name,
                 'metadata': metadata or {}
             }).execute()
@@ -44,7 +46,7 @@ class ProjectStorage:
             Project details or None if not found
         """
         try:
-            result = supabase.table('projects').select('*').eq('name', project_name).execute()
+            result = self.supabase.table('projects').select('*').eq('name', project_name).execute()
             if result.data:
                 self.project_id = result.data[0]['id']
                 return result.data[0]
@@ -67,7 +69,7 @@ class ProjectStorage:
         """
         try:
             folder_name = os.path.basename(folder_path)
-            result = supabase.table('project_folders').insert({
+            result = self.supabase.table('project_folders').insert({
                 'project_id': self.project_id,
                 'folder_name': folder_name,
                 'folder_path': folder_path,
@@ -91,7 +93,7 @@ class ProjectStorage:
             Folder details or None if not found
         """
         try:
-            result = supabase.table('project_folders').select('*').eq('project_id', self.project_id).eq('folder_path', folder_path).execute()
+            result = self.supabase.table('project_folders').select('*').eq('project_id', self.project_id).eq('folder_path', folder_path).execute()
             return result.data[0] if result.data else None
             
         except Exception as e:
@@ -118,10 +120,10 @@ class ProjectStorage:
             # Upload file to Supabase Storage
             storage_path = f"{self.project_id}/{file_path}"
             with open(local_file_path, 'rb') as f:
-                supabase.storage.from_(self.storage_bucket).upload(storage_path, f)
+                self.supabase.storage.from_(self.storage_bucket).upload(storage_path, f)
             
             # Create database record
-            result = supabase.table('project_files').insert({
+            result = self.supabase.table('project_files').insert({
                 'project_id': self.project_id,
                 'file_name': file_name,
                 'file_path': file_path,
@@ -148,14 +150,14 @@ class ProjectStorage:
             File details with download URL or None if not found
         """
         try:
-            result = supabase.table('project_files').select('*').eq('project_id', self.project_id).eq('file_path', file_path).execute()
+            result = self.supabase.table('project_files').select('*').eq('project_id', self.project_id).eq('file_path', file_path).execute()
             if not result.data:
                 return None
                 
             file_data = result.data[0]
             
             # Get download URL from storage
-            download_url = supabase.storage.from_(self.storage_bucket).create_signed_url(
+            download_url = self.supabase.storage.from_(self.storage_bucket).create_signed_url(
                 file_data['storage_path'],
                 3600  # URL valid for 1 hour
             )
@@ -179,7 +181,7 @@ class ProjectStorage:
             True if successful, False otherwise
         """
         try:
-            result = supabase.table('project_files').select('storage_path').eq('project_id', self.project_id).eq('file_path', file_path).execute()
+            result = self.supabase.table('project_files').select('storage_path').eq('project_id', self.project_id).eq('file_path', file_path).execute()
             if not result.data:
                 return False
                 
@@ -187,7 +189,7 @@ class ProjectStorage:
             
             # Download file from storage
             with open(local_path, 'wb') as f:
-                data = supabase.storage.from_(self.storage_bucket).download(storage_path)
+                data = self.supabase.storage.from_(self.storage_bucket).download(storage_path)
                 f.write(data)
             
             return True
@@ -204,7 +206,7 @@ class ProjectStorage:
             List of files and folders with their details
         """
         try:
-            result = supabase.rpc('get_project_structure', {'project_id': self.project_id}).execute()
+            result = self.supabase.rpc('get_project_structure', {'project_id': self.project_id}).execute()
             return result.data
             
         except Exception as e:
@@ -223,14 +225,14 @@ class ProjectStorage:
         """
         try:
             # Get storage path
-            result = supabase.table('project_files').select('storage_path').eq('project_id', self.project_id).eq('file_path', file_path).execute()
+            result = self.supabase.table('project_files').select('storage_path').eq('project_id', self.project_id).eq('file_path', file_path).execute()
             if result.data:
                 storage_path = result.data[0]['storage_path']
                 # Delete from storage
-                supabase.storage.from_(self.storage_bucket).remove([storage_path])
+                self.supabase.storage.from_(self.storage_bucket).remove([storage_path])
             
             # Delete database record
-            supabase.table('project_files').delete().eq('project_id', self.project_id).eq('file_path', file_path).execute()
+            self.supabase.table('project_files').delete().eq('project_id', self.project_id).eq('file_path', file_path).execute()
             return True
             
         except Exception as e:
@@ -249,16 +251,16 @@ class ProjectStorage:
         """
         try:
             # Get all files in the folder
-            result = supabase.table('project_files').select('storage_path').eq('project_id', self.project_id).like('file_path', f"{folder_path}/%").execute()
+            result = self.supabase.table('project_files').select('storage_path').eq('project_id', self.project_id).like('file_path', f"{folder_path}/%").execute()
             
             # Delete files from storage
             if result.data:
                 storage_paths = [file['storage_path'] for file in result.data]
-                supabase.storage.from_(self.storage_bucket).remove(storage_paths)
+                self.supabase.storage.from_(self.storage_bucket).remove(storage_paths)
             
             # Delete database records
-            supabase.table('project_files').delete().eq('project_id', self.project_id).like('file_path', f"{folder_path}/%").execute()
-            supabase.table('project_folders').delete().eq('project_id', self.project_id).eq('folder_path', folder_path).execute()
+            self.supabase.table('project_files').delete().eq('project_id', self.project_id).like('file_path', f"{folder_path}/%").execute()
+            self.supabase.table('project_folders').delete().eq('project_id', self.project_id).eq('folder_path', folder_path).execute()
             
             return True
             
@@ -287,9 +289,68 @@ class ProjectStorage:
             if metadata is not None:
                 update_data['metadata'] = metadata
                 
-            supabase.table('project_files').update(update_data).eq('project_id', self.project_id).eq('file_path', file_path).execute()
+            self.supabase.table('project_files').update(update_data).eq('project_id', self.project_id).eq('file_path', file_path).execute()
             return True
             
         except Exception as e:
             print(f"[ERROR] Failed to update file: {e}")
-            return False 
+            return False
+
+    async def list_bucket_files(self, prefix: str = "", depth: int = 0) -> List[Dict[str, Any]]:
+        """
+        List all files in the storage bucket recursively, optionally filtered by prefix
+        
+        Args:
+            prefix: Optional prefix to filter files (e.g. project ID)
+            depth: Current recursion depth (for debugging)
+            
+        Returns:
+            List of file information
+        """
+        try:
+            all_files = []
+            indent = "  " * depth
+            print(f"{indent}[DEBUG] Entering list_bucket_files with prefix: '{prefix}' (depth: {depth})")
+            
+            # Get initial list of files/folders
+            items = self.supabase.storage.from_(self.storage_bucket).list(path=prefix)
+            print(f"{indent}[DEBUG] Found {len(items)} items at prefix '{prefix}'")
+            
+            for item in items:
+                item_name = item['name']
+                print(f"{indent}[DEBUG] Processing item: {item_name}")
+                
+                # If the item name contains a period, it's a file
+                if '.' in os.path.basename(item_name):
+                    print(f"{indent}[DEBUG] Found file: {item_name}")
+                    all_files.append(item)
+                else:
+                    # It's a directory, recursively list its contents
+                    new_prefix = f"{prefix}/{item_name}" if prefix else item_name
+                    print(f"{indent}[DEBUG] Found directory: {item_name}, recursing with prefix: {new_prefix}")
+                    subfolder_files = await self.list_bucket_files(prefix=new_prefix, depth=depth + 1)
+                    all_files.extend(subfolder_files)
+            
+            print(f"{indent}[DEBUG] Exiting list_bucket_files for prefix '{prefix}' with {len(all_files)} total files")
+            return all_files
+            
+        except Exception as e:
+            print(f"{indent}[ERROR] Failed to list bucket files for prefix '{prefix}': {e}")
+            return []
+
+    async def get_bucket_file(self, file_path: str) -> Optional[bytes]:
+        """
+        Get file content directly from storage bucket
+        
+        Args:
+            file_path: Path to the file in the bucket
+            
+        Returns:
+            File content as bytes if successful, None otherwise
+        """
+        try:
+            data = self.supabase.storage.from_(self.storage_bucket).download(file_path)
+            return data
+        except Exception as e:
+            print(f"[ERROR] Failed to get bucket file {file_path}: {e}")
+            return None 

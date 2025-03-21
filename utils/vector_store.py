@@ -37,10 +37,10 @@ class SupabaseVectorStore:
             print(f"[ERROR] Failed to initialize collection: {e}")
             raise
 
-    async def get_embedding(self, text: str) -> List[float]:
+    def get_embedding(self, text: str) -> List[float]:
         """Get embedding for text using OpenAI"""
         try:
-            response = await self.client.embeddings.create(
+            response = self.client.embeddings.create(
                 model="text-embedding-ada-002",
                 input=text
             )
@@ -60,7 +60,7 @@ class SupabaseVectorStore:
             # Get embeddings for all documents
             embeddings = []
             for doc in documents:
-                embedding = await self.get_embedding(doc['content'])
+                embedding = self.get_embedding(doc['content'])
                 embeddings.append(embedding)
 
             # Prepare data for insertion
@@ -113,7 +113,7 @@ class SupabaseVectorStore:
         """
         try:
             # Get query embedding
-            query_embedding = await self.get_embedding(query)
+            query_embedding = self.get_embedding(query)
 
             # Query using vector similarity
             result = supabase.rpc(

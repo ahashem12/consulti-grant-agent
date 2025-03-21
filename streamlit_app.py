@@ -42,27 +42,14 @@ async def initialize_grant_system():
     """Initialize the grant system and projects"""
     if st.session_state.grant_system is None:
         with st.spinner("Initializing grant system..."):
-            # Get the correct path to projects_data inside GrantRAG
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            projects_data_path = os.path.join(current_dir, "projects_data")
-            
-            st.session_state.grant_system = GrantAssessmentSystem(projects_data_path)
+            st.session_state.grant_system = GrantAssessmentSystem()
             await st.session_state.grant_system.initialize_projects()
             
             # Get initial project info
-            if os.path.exists(projects_data_path):
-                project_dirs = [d for d in os.listdir(projects_data_path) 
-                              if os.path.isdir(os.path.join(projects_data_path, d))]
-                for project_name in project_dirs:
-                    project_path = os.path.join(projects_data_path, project_name)
-                    file_count = sum([len(files) for _, _, files in os.walk(project_path)])
-                    
-                    st.session_state.projects_info[project_name] = {
-                        "name": project_name,
-                        "path": project_path,
-                        "file_count": file_count,
-                        "last_modified": datetime.fromtimestamp(os.path.getmtime(project_path)).strftime("%Y-%m-%d %H:%M:%S")
-                    }
+            for project_name in st.session_state.grant_system.projects:
+                project_info = await st.session_state.grant_system.get_project_info(project_name)
+                if project_info:
+                    st.session_state.projects_info[project_name] = project_info
             
             # Restore project stats if available
             if hasattr(st.session_state, 'saved_project_stats'):
@@ -77,7 +64,7 @@ def main():
     # Initialize session state
     init_session_state()
     
-    # Load saved session state automatically if enabled and file exists
+    # Load saved session state automatically if enabled
     if st.session_state.get("persistence_enabled", True) and os.path.exists("session_state.json"):
         load_session_state()
     
@@ -85,7 +72,14 @@ def main():
     apply_custom_css()
     
     # Initialize grant system
-    asyncio.run(initialize_grant_system())
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(initialize_grant_system())
+        loop.close()
+    except Exception as e:
+        st.error(f"Error initializing grant system: {str(e)}")
+        return
     
     # Create layout
     render_sidebar()
@@ -97,13 +91,19 @@ def main():
     st.text_input("🔍 Search across all projects", key="global_search", placeholder="Enter your search query...")
     if st.session_state.get("global_search"):
         with st.spinner("Searching..."):
-            search_results = asyncio.run(st.session_state.grant_system.search_across_projects(st.session_state.global_search))
-            if search_results:
-                for project, results in search_results.items():
-                    with st.expander(f"Results from {project}"):
-                        st.markdown(results)
-            else:
-                st.info("No results found")
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                search_results = loop.run_until_complete(st.session_state.grant_system.search_across_projects(st.session_state.global_search))
+                loop.close()
+                if search_results:
+                    for project, results in search_results.items():
+                        with st.expander(f"Results from {project}"):
+                            st.markdown(results)
+                else:
+                    st.info("No results found")
+            except Exception as e:
+                st.error(f"Error performing search: {str(e)}")
     
     # Show grant program info
     if st.session_state.selected_program:

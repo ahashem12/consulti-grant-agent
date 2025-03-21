@@ -15,6 +15,7 @@ import docx
 from dotenv import load_dotenv
 
 # Vector store
+from utils.project_storage import ProjectStorage
 from utils.vector_store import SupabaseVectorStore
 
 # Caching
@@ -67,33 +68,26 @@ def sanitize_name(name: str) -> str:
 
 # =================== PROJECT RAG CLASS ===================
 class ProjectRAG:
-    def __init__(self, project_name: str, project_path: str):
+    def __init__(self, project_name: str):
         """
         Initialize a RAG system for a specific project
         
         Args:
-            project_name: Name of the project (used for the collection name)
-            project_path: Path to the project's documents folder
+            project_name: Name of the project
         """
         self.project_name = project_name
-        self.project_path = project_path
         self.openai_key = openai_key
         self.client = OpenAI(api_key=self.openai_key)
         self.llm_model_name = os.getenv('LLM_MODEL', DEFAULT_LLM_MODEL)
         
-        # Sanitize collection name
+        # Initialize storage and vector store
+        self.storage = ProjectStorage()
         collection_name = sanitize_name(project_name)
-        
-        # Set up the vector store
         self.vector_store = SupabaseVectorStore(collection_name, openai_key)
         
         # Caching
         self.cache = PersistentCache(cache_dir=f"./cache/{collection_name}", ttl=3600)
         self.response_cache = PersistentCache(cache_dir=f"./response_cache/{collection_name}", ttl=3600)
-        
-        # Ingestion metadata to avoid reprocessing unchanged files
-        self.metadata_path = f"ingestion_metadata_{collection_name}.json"
-        self.ingestion_metadata = self.load_ingestion_metadata()
         
         # Statistics
         self.stats = {
@@ -212,109 +206,126 @@ class ProjectRAG:
             print(f"[ERROR] Failed to extract Excel {excel_path}: {e}")
             return "", []
 
-    async def ingest_document(self, file_path: str) -> bool:
-        """Ingest a document with enhanced context from file path"""
+    async def ingest_document(self, storage_path: str) -> bool:
+        """Ingest a document from Supabase Storage"""
         try:
-            # Check if file has been modified since last ingestion
-            mod_time = os.path.getmtime(file_path)
-            if file_path in self.ingestion_metadata and self.ingestion_metadata[file_path] >= mod_time:
-                print(f"[INFO] File unchanged: {file_path}")
-                return False
-                
-            # Get file context
-            file_name = os.path.basename(file_path)
-            parent_folder = os.path.basename(os.path.dirname(file_path))
-            relative_path = os.path.relpath(file_path, self.project_path)
+            # Extract the file name from the storage path
+            file_name = os.path.basename(storage_path)
             
-            # Extract text based on file type
-            ext = os.path.splitext(file_path)[1].lower()
-            document_text = ""
-            metadata = {
-                "source": file_path,
-                "file_name": file_name,
-                "parent_folder": parent_folder,
-                "relative_path": relative_path,
-                "file_type": ext.replace(".", ""),
-                "timestamp": datetime.now().isoformat()
-            }
+            # Get file content directly from storage using the full storage path
+            file_content = await self.storage.get_bucket_file(storage_path)
+            if not file_content:
+                print(f"[ERROR] Could not read file from storage: {storage_path}")
+                return False
             
-            if ext == ".pdf":
-                document_text = await self.extract_text_from_pdf(file_path)
-                document_text = f"File: {file_name}\nLocation: {parent_folder}\n\n{document_text}"
-                
-            elif ext in [".docx", ".doc"]:
-                document_text = await self.extract_text_from_docx(file_path)
-                document_text = f"File: {file_name}\nLocation: {parent_folder}\n\n{document_text}"
-                
-            elif ext in [".xlsx", ".xls"]:
-                document_text, sheet_names = await self.extract_data_from_excel(file_path)
-                metadata["sheet_names"] = sheet_names
-                
-            elif ext == ".txt":
-                with open(file_path, "r", encoding="utf-8") as f:
-                    document_text = f.read()
-                document_text = f"File: {file_name}\nLocation: {parent_folder}\n\n{document_text}"
-            else:
-                print(f"[WARN] Unsupported file type: {file_path}")
-                return False
-                
-            if not document_text.strip():
-                print(f"[WARN] No content extracted from: {file_path}")
-                return False
-                
-            # Process the text into chunks
-            chunks = self.preprocess_text(document_text)
-            if not chunks:
-                print(f"[WARN] No chunks created for: {file_path}")
-                return False
-                
-            # Prepare documents for vector store
-            documents = []
-            for i, chunk in enumerate(chunks):
-                chunk_id = f"{sanitize_name(file_name)}_{i}"
-                chunk_metadata = metadata.copy()
-                chunk_metadata["chunk_index"] = i
-                chunk_metadata["total_chunks"] = len(chunks)
-                
-                documents.append({
-                    "id": chunk_id,
-                    "content": chunk,
-                    "metadata": chunk_metadata
-                })
-                
-            # Delete existing chunks for this file
-            existing_chunks = [doc["id"] for doc in documents]
-            await self.vector_store.delete_documents(existing_chunks)
+            # Create a temporary file to process the content
+            temp_dir = os.path.join(os.getcwd(), "temp")
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_file = os.path.join(temp_dir, file_name)
             
-            # Add new chunks to vector store
-            success = await self.vector_store.add_documents(documents)
-            if not success:
-                print(f"[ERROR] Failed to add chunks to vector store: {file_path}")
-                return False
+            try:
+                # Write content to temp file
+                with open(temp_file, 'wb') as f:
+                    f.write(file_content)
                 
-            # Update metadata and stats
-            self.ingestion_metadata[file_path] = mod_time
-            self.save_ingestion_metadata()
-            self.stats["documents_processed"] += 1
-            self.stats["chunks_stored"] += len(chunks)
-            self.stats["last_update"] = datetime.now().isoformat()
-            
-            print(f"[INFO] Successfully ingested {file_path} with {len(chunks)} chunks")
-            return True
+                # Extract text based on file type
+                file_ext = os.path.splitext(file_name)[1].lower()
+                document_text = ""
+                metadata = {
+                    "source": storage_path,
+                    "type": file_ext[1:],  # Remove the dot
+                    "project": self.project_name
+                }
+                
+                if file_ext == '.pdf':
+                    with open(temp_file, 'rb') as f:
+                        pdf = PdfReader(f)
+                        for page in pdf.pages:
+                            document_text += page.extract_text() + "\n"
+                        metadata["pages"] = len(pdf.pages)
+                
+                elif file_ext in ['.docx', '.doc']:
+                    doc = docx.Document(temp_file)
+                    for para in doc.paragraphs:
+                        document_text += para.text + "\n"
+                    metadata["paragraphs"] = len(doc.paragraphs)
+                
+                elif file_ext in ['.xlsx', '.xls']:
+                    workbook = load_workbook(temp_file)
+                    for sheet in workbook.sheetnames:
+                        worksheet = workbook[sheet]
+                        for row in worksheet.iter_rows(values_only=True):
+                            document_text += " ".join(str(cell) for cell in row if cell is not None) + "\n"
+                    metadata["sheets"] = len(workbook.sheetnames)
+                
+                elif file_ext == '.txt':
+                    with open(temp_file, 'r', encoding='utf-8') as f:
+                        document_text = f.read()
+                
+                if not document_text.strip():
+                    print(f"[WARN] No text extracted from: {storage_path}")
+                    return False
+                
+                # Process the text into chunks
+                chunks = self.preprocess_text(document_text)
+                if not chunks:
+                    print(f"[WARN] No chunks created for: {storage_path}")
+                    return False
+                
+                # Prepare documents for vector store
+                documents = []
+                for i, chunk in enumerate(chunks):
+                    chunk_id = f"{sanitize_name(file_name)}_{i}"
+                    chunk_metadata = metadata.copy()
+                    chunk_metadata["chunk_index"] = i
+                    chunk_metadata["total_chunks"] = len(chunks)
+                    
+                    documents.append({
+                        "id": chunk_id,
+                        "content": chunk,
+                        "metadata": chunk_metadata
+                    })
+                
+                # Delete existing chunks for this file
+                existing_chunks = [doc["id"] for doc in documents]
+                try:
+                    await self.vector_store.delete_documents(existing_chunks)
+                except Exception as e:
+                    print(f"[ERROR] Failed to delete existing chunks: {e}")
+
+                # Add new chunks to vector store
+                success = await self.vector_store.add_documents(documents)
+                if not success:
+                    print(f"[ERROR] Failed to add chunks to vector store: {storage_path}")
+                    return False
+                
+                # Update stats
+                self.stats["documents_processed"] += 1
+                self.stats["chunks_stored"] += len(chunks)
+                self.stats["last_update"] = datetime.now().isoformat()
+                
+                print(f"[INFO] Successfully ingested {storage_path} with {len(chunks)} chunks")
+                return True
+                
+            finally:
+                # Clean up temp file
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
             
         except Exception as e:
-            print(f"[ERROR] Failed to ingest {file_path}: {e}")
+            print(f"[ERROR] Failed to ingest {storage_path}: {e}")
             return False
 
-    async def ingest_directory(self) -> Dict[str, Any]:
-        """Ingest all supported documents in the project directory"""
+    async def ingest_project(self) -> Dict[str, Any]:
+        """Ingest all supported documents in the project"""
         start_time = time.time()
         processed_count = 0
         skipped_count = 0
         error_count = 0
         
         print(f"[INFO] Starting ingestion for project: {self.project_name}")
-        print(f"[INFO] Scanning directory: {self.project_path}")
         
         # Track ingestion metrics
         ingestion_results = {
@@ -324,54 +335,79 @@ class ProjectRAG:
             "start_time": datetime.now().isoformat()
         }
         
-        # Walk through all files in the directory and its subdirectories
-        for root, _, files in os.walk(self.project_path):
-            for file in files:
-                file_path = os.path.join(root, file)
+        try:
+            print(f"[DEBUG] Listing files for project: {self.project_name}")
+            # List all files in the project's storage bucket folder recursively
+            files = await self.storage.list_bucket_files(prefix=self.project_name)
+            
+            if not files:
+                print(f"[INFO] No files found in storage for project: {self.project_name}")
+                return ingestion_results
+            
+            print(f"[INFO] Found {len(files)} files in project {self.project_name}")
+            print(f"[DEBUG] Files to process: {[f['name'] for f in files]}")
+            
+            # Process each file
+            for idx, file_info in enumerate(files, 1):
+                file_name = file_info['name']
+                print(f"[DEBUG] Processing file {idx}/{len(files)}: {file_name}")
+                
+                # Skip if this is a directory (no period in the basename)
+                if '.' not in os.path.basename(file_name):
+                    print(f"[INFO] Skipping directory: {file_name}")
+                    continue
+                
+                file_ext = os.path.splitext(file_name)[1].lower()
+                
+                # Skip unsupported file types
+                if file_ext not in ['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.txt']:
+                    print(f"[INFO] Skipping unsupported file type: {file_name}")
+                    skipped_count += 1
+                    ingestion_results["skipped_files"].append(file_name)
+                    continue
+                
                 try:
-                    # Check if file extension is supported
-                    ext = os.path.splitext(file_path)[1].lower()
-                    if ext not in [".pdf", ".docx", ".doc", ".xlsx", ".xls", ".txt"]:
-                        continue
-                        
-                    # Get relative path from project root for metadata
-                    rel_path = os.path.relpath(file_path, self.project_path)
-                    
-                    success = await self.ingest_document(file_path)
+                    print(f"[DEBUG] Starting ingestion of file: {file_name}")
+                    # Ingest the document using the file path directly from the bucket
+                    success = await self.ingest_document(file_name)
                     if success:
                         processed_count += 1
-                        ingestion_results["processed_files"].append({
-                            "file": rel_path,
-                            "full_path": file_path
-                        })
+                        ingestion_results["processed_files"].append(file_name)
+                        print(f"[INFO] Successfully processed: {file_name}")
                     else:
-                        skipped_count += 1
-                        ingestion_results["skipped_files"].append({
-                            "file": rel_path,
-                            "full_path": file_path
-                        })
+                        error_count += 1
+                        ingestion_results["error_files"].append(file_name)
+                        print(f"[ERROR] Failed to process: {file_name}")
                 except Exception as e:
                     error_count += 1
-                    ingestion_results["error_files"].append({
-                        "file": rel_path,
-                        "full_path": file_path,
-                        "error": str(e)
-                    })
-                    print(f"[ERROR] Failed to process {file_path}: {e}")
-        
-        # Calculate elapsed time
-        elapsed_time = time.time() - start_time
-        ingestion_results["elapsed_time"] = elapsed_time
-        ingestion_results["end_time"] = datetime.now().isoformat()
-        ingestion_results["total_processed"] = processed_count
-        ingestion_results["total_skipped"] = skipped_count
-        ingestion_results["total_errors"] = error_count
-        
-        print(f"[INFO] Ingestion completed for {self.project_name}")
-        print(f"[INFO] Processed: {processed_count}, Skipped: {skipped_count}, Errors: {error_count}")
-        print(f"[INFO] Elapsed time: {elapsed_time:.2f} seconds")
-        
-        return ingestion_results
+                    ingestion_results["error_files"].append(file_name)
+                    print(f"[ERROR] Error processing {file_name}: {e}")
+                
+                print(f"[DEBUG] Progress: {idx}/{len(files)} files processed")
+            
+            elapsed_time = time.time() - start_time
+            # Update ingestion results
+            ingestion_results.update({
+                "end_time": datetime.now().isoformat(),
+                "total_time": elapsed_time,
+                "processed_count": processed_count,
+                "skipped_count": skipped_count,
+                "error_count": error_count
+            })
+            
+            print(f"[INFO] Ingestion complete for {self.project_name}")
+            print(f"[INFO] Processed: {processed_count}, Skipped: {skipped_count}, Errors: {error_count}")
+            print(f"[INFO] Total time: {elapsed_time:.2f} seconds")
+            
+            return ingestion_results
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to ingest project {self.project_name}: {e}")
+            return {
+                "error": str(e),
+                "start_time": datetime.now().isoformat(),
+                "end_time": datetime.now().isoformat()
+            }
 
     # ------------------ QUERY & RESPONSE METHODS ------------------
     async def query_collection(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
@@ -673,370 +709,95 @@ class ProjectRAG:
 
 # =================== GRANT ASSESSMENT SYSTEM ===================
 class GrantAssessmentSystem:
-    def __init__(self, projects_dir: str):
-        """
-        Initialize the grant assessment system
-        
-        Args:
-            projects_dir: Directory containing project folders
-        """
-        self.projects_dir = projects_dir
-        self.projects = {}  # Map of project_name -> ProjectRAG
+    def __init__(self):
+        """Initialize the grant assessment system"""
+        self.projects = {}
         self.openai_key = openai_key
-        self.client = OpenAI(api_key=self.openai_key)
-        self.llm_model_name = os.getenv('LLM_MODEL', DEFAULT_LLM_MODEL)
-        
-        # Create projects directory if it doesn't exist
-        os.makedirs(projects_dir, exist_ok=True)
+        self.storage = ProjectStorage()  # Initialize Supabase storage
 
     async def initialize_projects(self):
-        """Initialize RAG systems for all projects in the projects directory"""
+        """Initialize all projects from Supabase"""
         try:
-            # Scan projects directory
-            if not os.path.exists(self.projects_dir):
-                print(f"[INFO] Creating projects directory: {self.projects_dir}")
-                os.makedirs(self.projects_dir)
+            # Get all projects from Supabase
+            result = self.storage.supabase.table('projects').select('*').execute()
+            if not result.data:
+                print("[INFO] No projects found in Supabase")
                 return
 
-            # Initialize ProjectRAG for each project folder
-            for item in os.listdir(self.projects_dir):
-                project_path = os.path.join(self.projects_dir, item)
-                if os.path.isdir(project_path):
-                    print(f"[INFO] Initializing project: {item}")
-                    self.projects[item] = ProjectRAG(item, project_path)
+            # Initialize RAG for each project
+            for project in result.data:
+                project_name = project['name']
+                print(f"[INFO] Initializing project: {project_name}")
+                self.projects[project_name] = ProjectRAG(project_name)
 
             print(f"[INFO] Initialized {len(self.projects)} projects")
-            
+
         except Exception as e:
             print(f"[ERROR] Failed to initialize projects: {e}")
             raise
 
-    async def ingest_project(self, project_name: str) -> bool:
-        """
-        Ingest all documents for a specific project
-        
-        Args:
-            project_name: Name of the project to ingest
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        if project_name not in self.projects:
-            print(f"[ERROR] Project not found: {project_name}")
-            return False
-            
+    async def add_project(self, project_name: str) -> bool:
+        """Add a new project"""
         try:
-            # Reset project stats before ingestion
-            self.projects[project_name].stats = {
-                "documents_processed": 0,
-                "chunks_stored": 0,
-                "last_update": None
-            }
+            # Create project in Supabase
+            project_id = await self.storage.create_project(project_name)
             
-            # Start ingestion
-            start_time = time.time()
-            results = await self.projects[project_name].ingest_directory()
-            
-            # Update project stats
-            project = self.projects[project_name]
-            project.stats["last_update"] = datetime.now().isoformat()
-            
-            # Calculate processing metrics
-            elapsed_time = time.time() - start_time
-            avg_time_per_doc = elapsed_time / max(1, project.stats["documents_processed"])
-            
-            # Store metrics in session state if available
-            try:
-                import streamlit as st
-                if "processing_metrics" in st.session_state:
-                    st.session_state.processing_metrics[project_name] = {
-                        "Documents Processed": project.stats["documents_processed"],
-                        "Chunks Stored": project.stats["chunks_stored"],
-                        "Processing Time": f"{elapsed_time:.1f}s",
-                        "Average Time per Document": f"{avg_time_per_doc:.2f}s"
-                    }
-                if "operation_timestamps" in st.session_state:
-                    if project_name not in st.session_state.operation_timestamps:
-                        st.session_state.operation_timestamps[project_name] = {}
-                    st.session_state.operation_timestamps[project_name]["Last Ingestion"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                if "ingested_projects" in st.session_state:
-                    st.session_state.ingested_projects.add(project_name)
-            except:
-                pass  # Streamlit context may not be available
-                
-            print(f"[INFO] Successfully ingested project {project_name}")
-            print(f"[INFO] Documents processed: {project.stats['documents_processed']}")
-            print(f"[INFO] Chunks stored: {project.stats['chunks_stored']}")
-            print(f"[INFO] Processing time: {elapsed_time:.1f}s")
-            
-            return True
-            
-        except Exception as e:
-            print(f"[ERROR] Failed to ingest project {project_name}: {e}")
-            return False
-
-    async def ingest_all_projects(self) -> Dict[str, Any]:
-        """
-        Ingest all documents for all projects
-        
-        Returns:
-            Dictionary with ingestion results for each project
-        """
-        results = {}
-        for project_name in self.projects:
-            print(f"[INFO] Ingesting project: {project_name}")
-            success = await self.ingest_project(project_name)
-            results[project_name] = {"success": success}
-        return results
-
-    async def add_project_folder(self, folder_path: str) -> bool:
-        """
-        Add a new project folder to the system
-        
-        Args:
-            folder_path: Path to the project folder to add
-            
-        Returns:
-            bool: True if successfully added, False otherwise
-        """
-        try:
-            if not os.path.isdir(folder_path):
-                print(f"[ERROR] Not a valid directory: {folder_path}")
-                return False
-                
-            project_name = os.path.basename(folder_path)
-            if project_name in self.projects:
-                print(f"[WARN] Project {project_name} already exists")
-                return False
-                
-            # Copy folder to projects directory
-            target_path = os.path.join(self.projects_dir, project_name)
-            if os.path.exists(target_path):
-                print(f"[WARN] Target path already exists: {target_path}")
-                return False
-                
-            # Create target directory and copy files
-            os.makedirs(target_path, exist_ok=True)
-            for root, _, files in os.walk(folder_path):
-                for file in files:
-                    src_file = os.path.join(root, file)
-                    rel_path = os.path.relpath(src_file, folder_path)
-                    dst_file = os.path.join(target_path, rel_path)
-                    os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                    import shutil
-                    shutil.copy2(src_file, dst_file)
-                    
-            # Initialize ProjectRAG for the new folder
-            self.projects[project_name] = ProjectRAG(project_name, target_path)
+            # Initialize ProjectRAG
+            self.projects[project_name] = ProjectRAG(project_name)
             print(f"[INFO] Successfully added project: {project_name}")
             
-            # Ingest the new project
-            await self.ingest_project(project_name)
             return True
             
         except Exception as e:
-            print(f"[ERROR] Failed to add project folder: {e}")
+            print(f"[ERROR] Failed to add project: {e}")
             return False
 
-    async def chat_with_projects(self, query: str, project_names: list[str]) -> dict:
-        """
-        Ask a question to multiple projects and generate a comparative analysis.
-        
-        Args:
-            query (str): The question to ask each project
-            project_names (list[str]): List of project names to query
-            
-        Returns:
-            dict: Contains individual project responses and comparative analysis
-        """
-        if not project_names or len(project_names) < 2:
-            raise ValueError("At least 2 projects are required for multi-project chat")
-        
-        # Get responses from each project
-        responses = {}
-        for project_name in project_names:
-            try:
-                project_response = await self.ask_project(project_name, query)
-                responses[project_name] = project_response
-            except Exception as e:
-                responses[project_name] = {
-                    "answer": f"Error getting response: {str(e)}",
-                    "sources": []
-                }
-        
-        # Generate comparative analysis
+    async def get_project_info(self, project_name: str) -> Dict[str, Any]:
+        """Get project information including file count and stats"""
         try:
-            # Prepare context for comparison
-            context = f"Question asked: {query}\n\nProject responses:\n"
-            for project, response in responses.items():
-                context += f"\n{project}:\n{response['answer']}\n"
-            
-            comparison_prompt = f"""Based on the responses from multiple projects to the question "{query}", please provide a comparative analysis.
-            Focus on:
-            1. Key similarities and differences in the responses
-            2. Notable insights unique to each project
-            3. Overall patterns or trends
-            4. Implications of these differences
-            
-            Context:
-            {context}
-            
-            Please provide a clear, structured analysis that helps understand how the projects relate to each other in the context of this question."""
-            
-            response = await self.client.chat.completions.create(
-                model=self.llm_model_name,
-                messages=[
-                    {"role": "system", "content": "You are an expert grant analyst tasked with comparing responses from multiple projects. Provide clear, insightful analysis that helps understand the relationships and differences between projects."},
-                    {"role": "user", "content": comparison_prompt}
-                ],
-                temperature=0.3
-            )
-            
-            comparison = response.choices[0].message.content
-            
-        except Exception as e:
-            comparison = f"Error generating comparative analysis: {str(e)}"
-        
-        return {
-            "responses": responses,
-            "comparison": comparison
-        }
+            # Get project from Supabase
+            project = await self.storage.get_project(project_name)
+            if not project:
+                return None
 
-    async def search_projects(self, query: str) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Search across all projects for relevant information
-        
-        Args:
-            query: Search query
-            
-        Returns:
-            Dictionary mapping project names to lists of relevant chunks
-        """
+            # Get file count from Supabase
+            result = self.storage.supabase.table('project_files').select('*', count='exact').eq('project_id', project['id']).execute()
+            file_count = len(result.data) if result.data else 0
+
+            # Get project stats if available
+            stats = self.projects[project_name].stats if project_name in self.projects else {}
+
+            return {
+                "name": project_name,
+                "file_count": file_count,
+                "stats": stats,
+                "last_modified": project['updated_at']
+            }
+
+        except Exception as e:
+            print(f"[ERROR] Failed to get project info: {e}")
+            return None
+
+    async def search_across_projects(self, query: str, n_results: int = 3) -> Dict[str, str]:
+        """Search across all projects"""
         results = {}
-        for project_name, project in self.projects.items():
-            chunks = await project.query_collection(query, n_results=3)
-            if chunks:
-                results[project_name] = chunks
-                
-        return results
-
-    async def generate_comparative_analysis(self, eligible_only: bool = True) -> Dict[str, Any]:
-        """
-        Generate a comparative analysis of multiple projects
         
-        Args:
-            eligible_only: If True, only compare eligible projects
-            
-        Returns:
-            Dictionary containing comparative analysis results
-        """
         try:
-            if len(self.projects) < 2:
-                return {
-                    "error": "At least two projects are required for comparative analysis",
-                    "timestamp": datetime.now().isoformat()
-                }
+            for project_name, rag in self.projects.items():
+                project_results = await rag.query_project(query, n_results)
+                if project_results:
+                    results[project_name] = project_results
             
-            # Prepare context about all projects
-            projects_context = ""
-            responses = {}
-            
-            for project_name, project in self.projects.items():
-                # Query each project for key information
-                query = (
-                    "Summarize this project's key aspects including: "
-                    "1. Main objectives and goals "
-                    "2. Target beneficiaries "
-                    "3. Implementation approach "
-                    "4. Expected outcomes and impact "
-                    "5. Budget and resource requirements"
-                )
-                
-                response = await project.ask(query)
-                responses[project_name] = response
-                
-                projects_context += f"\nProject: {project_name}\n{response['answer']}\n"
-                
-            # Generate comparative analysis using GPT-4
-            system_prompt = (
-                "You are an expert grant analyst tasked with comparing multiple projects. "
-                "Provide a detailed comparative analysis focusing on strengths, weaknesses, "
-                "synergies, and potential impact. Be objective and support your analysis "
-                "with specific examples from the projects."
-            )
-            
-            user_prompt = (
-                "Compare the following projects, analyzing their relative merits, "
-                "potential impact, and areas of complementarity or overlap:\n\n"
-                f"{projects_context}\n\n"
-                "Please structure your analysis to cover:\n"
-                "1. Key similarities and differences\n"
-                "2. Relative strengths and weaknesses\n"
-                "3. Potential synergies or overlaps\n"
-                "4. Comparative impact assessment\n"
-                "5. Resource efficiency comparison\n"
-                "6. Recommendations for optimization"
-            )
-            
-            # Generate comparative analysis
-            analysis_response = self.client.chat.completions.create(
-                model=self.llm_model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=0.3
-            )
-            
-            return {
-                "responses": responses,
-                "comparison": analysis_response.choices[0].message.content,
-                "timestamp": datetime.now().isoformat(),
-                "projects_compared": list(self.projects.keys())
-            }
+            return results
             
         except Exception as e:
-            print(f"[ERROR] Failed to generate comparative analysis: {e}")
-            return {
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
-
-    async def ask_project(self, project_name: str, question: str) -> Dict[str, Any]:
-        """
-        Ask a question to a specific project
-        
-        Args:
-            project_name: Name of the project to query
-            question: Question to ask
-            
-        Returns:
-            Dictionary with the response from the project
-        """
-        if project_name not in self.projects:
-            return {
-                "error": f"Project {project_name} not found",
-                "answer": f"Error: Project {project_name} not found",
-                "sources": [],
-                "timestamp": datetime.now().isoformat()
-            }
-            
-        try:
-            response = await self.projects[project_name].ask(question)
-            return response
-        except Exception as e:
-            print(f"[ERROR] Failed to query project {project_name}: {e}")
-            return {
-                "error": str(e),
-                "answer": f"Error querying project: {str(e)}",
-                "sources": [],
-                "timestamp": datetime.now().isoformat()
-            }
+            print(f"[ERROR] Failed to search across projects: {e}")
+            return {"error": str(e)}
 
 # =================== MAIN FUNCTION ===================
 async def main():
     # Setup the grant assessment system
-    system = GrantAssessmentSystem("./GrantRAG/projects_data")
+    system = GrantAssessmentSystem()
     await system.initialize_projects()
     
     # Ingest all project documents

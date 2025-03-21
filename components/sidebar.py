@@ -6,6 +6,7 @@ from config.constants import GRANT_PROGRAMS
 from utils import save_session_state
 from typing import Dict, Any
 import time
+from grant_rag import ProjectRAG
 
 async def check_eligibility(project_names, criteria):
     """Check eligibility for selected projects"""
@@ -116,22 +117,33 @@ def render_sidebar():
     # 2. Select Projects
     st.sidebar.markdown("### 2. Select Projects")
     
-    # Get available projects
-    projects_data_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "projects_data")
+    # Get available projects from storage bucket folders
     available_projects = []
-    
-    if os.path.exists(projects_data_path):
-        available_projects = [d for d in os.listdir(projects_data_path) 
-                            if os.path.isdir(os.path.join(projects_data_path, d))]
+    try:
+        # List contents of the storage bucket
+        storage = st.session_state.grant_system.storage
+        bucket_contents = storage.supabase.storage.from_(storage.storage_bucket).list()
+        
+        # For debugging
+        st.sidebar.markdown("#### Debug: Bucket Contents")
+        st.sidebar.json(bucket_contents)
+        
+        # Extract directory names from bucket contents
+        available_projects = [item['name'] for item in bucket_contents]
+    except Exception as e:
+        st.sidebar.error(f"Error loading projects: {str(e)}")
     
     if not available_projects:
-        st.sidebar.warning("No projects found in projects_data directory")
+        st.sidebar.warning("No projects found in storage bucket")
     else:
+        st.sidebar.markdown("#### Available Projects")
+        st.sidebar.write(available_projects)
+        
         # Project selection
         selected_projects = st.sidebar.multiselect(
             "Select projects to analyze",
             options=available_projects,
-            default=st.session_state.selected_projects,
+            default=st.session_state.selected_projects if 'selected_projects' in st.session_state else [],
             key="project_selector"
         )
         
@@ -166,11 +178,34 @@ def render_sidebar():
                     
                     # Perform ingestion
                     start_time = time.time()
-                    success = asyncio.run(st.session_state.grant_system.ingest_project(project))
-                    
-                    if success:
-                        st.session_state.ingested_projects.add(project)
-                        st.session_state.operation_timestamps[project]["Last Ingestion"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    try:
+                        # Create a new event loop for this operation
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        
+                        # Get the project's RAG instance and ingest
+                        if project not in st.session_state.grant_system.projects:
+                            st.sidebar.info(f"Initializing project {project}...")
+                            st.session_state.grant_system.projects[project] = ProjectRAG(project)
+                        
+                        # List files in the project's folder
+                        storage = st.session_state.grant_system.storage
+                        project_files = storage.supabase.storage.from_(storage.storage_bucket).list(path=project)
+                        st.sidebar.info(f"Found {len(project_files)} files in project {project}")
+                        
+                        success = loop.run_until_complete(st.session_state.grant_system.projects[project].ingest_project())
+                        loop.close()
+                        
+                        if success:
+                            st.session_state.ingested_projects.add(project)
+                            st.session_state.operation_timestamps[project]["Last Ingestion"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            st.sidebar.success(f"Successfully ingested {project}")
+                        else:
+                            st.sidebar.warning(f"No files found or nothing to ingest for {project}")
+                            
+                    except Exception as e:
+                        st.sidebar.error(f"Error ingesting project {project}: {str(e)}")
+                        success = False
                 
                 progress_bar.empty()
                 status_text.empty()
