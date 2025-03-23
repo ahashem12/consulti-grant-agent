@@ -1,7 +1,6 @@
 openai>=1.0.0
 chromadb==0.6.3
-apsw>=3.45.0.0; platform_system != "Windows"  # Preferred for production
-# pysqlite3>=0.4.6; platform_system == "Windows"  # Fallback for Windows
+pysqlite3>=0.4.6
 pypdf>=3.17.1
 openpyxl>=3.1.2
 python-docx>=1.0.1
