@@ -10,10 +10,6 @@ from typing import Dict, List, Any, Optional
 import pandas as pd
 from datetime import datetime
 import time
-import sys
-
-# Add the GrantRAG directory to the Python path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import components and utils
 from components import (
@@ -46,27 +42,17 @@ async def initialize_grant_system():
     """Initialize the grant system and projects"""
     if st.session_state.grant_system is None:
         with st.spinner("Initializing grant system..."):
-            # Get the correct path to projects_data inside GrantRAG
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            projects_data_path = os.path.join(current_dir, "projects_data")
-            
-            st.session_state.grant_system = GrantAssessmentSystem(projects_data_path)
+            st.session_state.grant_system = GrantAssessmentSystem()
             await st.session_state.grant_system.initialize_projects()
             
-            # Get initial project info
-            if os.path.exists(projects_data_path):
-                project_dirs = [d for d in os.listdir(projects_data_path) 
-                              if os.path.isdir(os.path.join(projects_data_path, d))]
-                for project_name in project_dirs:
-                    project_path = os.path.join(projects_data_path, project_name)
-                    file_count = sum([len(files) for _, _, files in os.walk(project_path)])
-                    
-                    st.session_state.projects_info[project_name] = {
-                        "name": project_name,
-                        "path": project_path,
-                        "file_count": file_count,
-                        "last_modified": datetime.fromtimestamp(os.path.getmtime(project_path)).strftime("%Y-%m-%d %H:%M:%S")
-                    }
+            # Get initial project info from Supabase
+            for project_name in st.session_state.grant_system.projects:
+                project = st.session_state.grant_system.projects[project_name]
+                st.session_state.projects_info[project_name] = {
+                    "name": project_name,
+                    "stats": project.stats,
+                    "last_modified": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
             
             # Restore project stats if available
             if hasattr(st.session_state, 'saved_project_stats'):
@@ -101,11 +87,15 @@ def main():
     st.text_input("🔍 Search across all projects", key="global_search", placeholder="Enter your search query...")
     if st.session_state.get("global_search"):
         with st.spinner("Searching..."):
-            search_results = asyncio.run(st.session_state.grant_system.search_across_projects(st.session_state.global_search))
+            search_results = asyncio.run(st.session_state.grant_system.search_projects(st.session_state.global_search))
             if search_results:
                 for project, results in search_results.items():
                     with st.expander(f"Results from {project}"):
-                        st.markdown(results)
+                        st.markdown(results["answer"])
+                        if results.get("sources"):
+                            st.markdown("**Sources:**")
+                            for source in results["sources"]:
+                                st.markdown(f"- {source}")
             else:
                 st.info("No results found")
     
