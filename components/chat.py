@@ -4,7 +4,8 @@ from datetime import datetime
 from grant_rag import GrantAssessmentSystem
 
 async def render_chat_interface():
-    """Render the chat interface inside Streamlit."""
+    """Render enhanced chat interface for asking questions about projects"""
+    st.markdown("<h2 class='sub-header'>Project Chat Interface</h2>", unsafe_allow_html=True)
     # Initialize session state if missing
     if "selected_projects" not in st.session_state:
         st.session_state.selected_projects = []

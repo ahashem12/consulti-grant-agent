@@ -377,7 +377,7 @@ class ProjectRAG:
         return ingestion_results
 
     # ------------------ QUERY & RESPONSE METHODS ------------------
-    async def query_collection(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
+    async def query_collection(self, query: str, n_results: int = 100) -> List[Dict[str, Any]]:
         """
         Query the collection and return the most relevant chunks with metadata
         """
@@ -386,6 +386,7 @@ class ProjectRAG:
             query_hash = hashlib.md5(query.encode()).hexdigest()
             cached = self.cache.get(query_hash)
             if cached:
+                print(f"[INFO] cached: {cached}")
                 if DEBUG:
                     print(f"[DEBUG] Using cached chunks for query: {query}")
                 return cached
@@ -396,7 +397,8 @@ class ProjectRAG:
                 n_results=n_results, 
                 include=["documents", "metadatas", "distances"]
             )
-            
+            print(f"[INFO] results in query_collection: {results}")
+
             if not results["documents"] or not results["documents"][0]:
                 return []
                 
@@ -435,6 +437,7 @@ class ProjectRAG:
         # Format context for the prompt
         formatted_context = ""
         sources = []
+        print(f"[INFO] context_chunks: {len(context_chunks)}")
         for i, chunk in enumerate(context_chunks):
             formatted_context += f"[CHUNK {i+1}] {chunk['content']}\n\n"
             if "metadata" in chunk and "source" in chunk["metadata"]:
@@ -444,7 +447,7 @@ class ProjectRAG:
                     
         if not formatted_context:
             formatted_context = "No relevant information found in the project documents."
-            
+        print(f"[INFO] formatted_context: {formatted_context}")
         # Create prompt for the LLM
         system_prompt = (
             "You are an AI assistant specialized in analyzing grant applications and project documents. "
@@ -500,7 +503,7 @@ class ProjectRAG:
         print(f"[INFO] Processing query for {self.project_name}: {query}")
         
         # 1. Retrieve relevant chunks
-        retrieved_chunks = await self.query_collection(query, n_results=5)
+        retrieved_chunks = await self.query_collection(query, n_results=100)
         
         # 2. Generate response
         response = await self.generate_response(query, retrieved_chunks)
