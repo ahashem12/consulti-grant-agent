@@ -1,6 +1,6 @@
-__import__('pysqlite3')
+# __import__('pysqlite3')
 import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 import os
 import asyncio
@@ -95,56 +95,56 @@ def main():
     render_sidebar()
     
     # Main content area
-    st.markdown("<h1 class='main-header'>Consulti Grant Application Analysis</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-header'>Consulti Lawyer Geek</h1>", unsafe_allow_html=True)
     
-    # Global search
-    st.text_input("🔍 Search across all projects", key="global_search", placeholder="Enter your search query...")
-    if st.session_state.get("global_search"):
-        with st.spinner("Searching..."):
-            search_results = asyncio.run(st.session_state.grant_system.search_across_projects(st.session_state.global_search))
-            if search_results:
-                for project, results in search_results.items():
-                    with st.expander(f"Results from {project}"):
-                        st.markdown(results)
-            else:
-                st.info("No results found")
+    # # Global search
+    # st.text_input("🔍 Search across all projects", key="global_search", placeholder="Enter your search query...")
+    # if st.session_state.get("global_search"):
+    #     with st.spinner("Searching..."):
+    #         search_results = asyncio.run(st.session_state.grant_system.search_across_projects(st.session_state.global_search))
+    #         if search_results:
+    #             for project, results in search_results.items():
+    #                 with st.expander(f"Results from {project}"):
+    #                     st.markdown(results)
+    #         else:
+    #             st.info("No results found")
     
-    # Show grant program info
-    if st.session_state.selected_program:
-        program = st.session_state.selected_program
-        st.markdown(f"<div class='info-box'><h3>Selected Program: {program}</h3><p>{GRANT_PROGRAMS[program]['description']}</p></div>", unsafe_allow_html=True)
+    # # Show grant program info
+    # if st.session_state.selected_program:
+    #     program = st.session_state.selected_program
+    #     st.markdown(f"<div class='info-box'><h3>Selected Program: {program}</h3><p>{GRANT_PROGRAMS[program]['description']}</p></div>", unsafe_allow_html=True)
     
     # Create tabs for different views
     tabs = st.tabs([
-        "📊 Dashboard",
-        "✅ Eligibility Results",
-        "📝 Reports",
-        "💡 Recommendations",
-        "🔄 Comparative Analysis",
+        # "📊 Dashboard",
+        # "✅ Eligibility Results",
+        # "📝 Reports",
+        # "💡 Recommendations",
+        # "🔄 Comparative Analysis",
         "💬 Chat",
-        "⚙️ Settings"
+        # "⚙️ Settings"
     ])
     
+    # with tabs[0]:
+    #     render_project_dashboard()
+        
+    # with tabs[1]:
+    #     render_eligibility_results()
+        
+    # with tabs[2]:
+    #     render_reports()
+        
+    # with tabs[3]:
+    #     render_recommendations()
+        
+    # with tabs[4]:
+    #     render_comparative_analysis()
+        
     with tabs[0]:
-        render_project_dashboard()
-        
-    with tabs[1]:
-        render_eligibility_results()
-        
-    with tabs[2]:
-        render_reports()
-        
-    with tabs[3]:
-        render_recommendations()
-        
-    with tabs[4]:
-        render_comparative_analysis()
-        
-    with tabs[5]:
         render_chat_interface()
         
-    with tabs[6]:
-        render_settings()
+    # with tabs[6]:
+    #     render_settings()
 
 def render_comparative_analysis():
     """Render comparative analysis in the main area"""

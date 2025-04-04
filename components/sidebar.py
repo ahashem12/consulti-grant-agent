@@ -99,19 +99,19 @@ async def generate_comparative(eligible_only=True):
 
 def render_sidebar():
     """Render the sidebar with project selection and actions"""
-    st.sidebar.title("Grant RAG System")
+    # st.sidebar.title("Grant RAG System")
     
-    # 1. Select Grant Program
-    st.sidebar.markdown("### 1. Select Grant Program")
-    program = st.sidebar.selectbox(
-        "Grant Program",
-        options=list(GRANT_PROGRAMS.keys()),
-        key="program_selector"
-    )
+    # # 1. Select Grant Program
+    # st.sidebar.markdown("### 1. Select Grant Program")
+    # program = st.sidebar.selectbox(
+    #     "Grant Program",
+    #     options=list(GRANT_PROGRAMS.keys()),
+    #     key="program_selector"
+    # )
     
-    if program:
-        st.session_state.selected_program = program
-        st.sidebar.markdown(f"**Description:** {GRANT_PROGRAMS[program]['description']}")
+    # if program:
+    #     st.session_state.selected_program = program
+    #     st.sidebar.markdown(f"**Description:** {GRANT_PROGRAMS[program]['description']}")
     
     # 2. Select Projects
     st.sidebar.markdown("### 2. Select Projects")
@@ -197,56 +197,56 @@ def render_sidebar():
                         st.markdown(f"**Processing Time:** {metrics['Processing Time']}")
                         
     # 3. Analysis Actions
-    if st.session_state.selected_projects:
-        st.sidebar.markdown("### 3. Analysis Actions")
+    # if st.session_state.selected_projects:
+    #     st.sidebar.markdown("### 3. Analysis Actions")
         
-        # Check Eligibility
-        if st.sidebar.button("Check Eligibility", use_container_width=True):
-            st.session_state.is_processing = True
-            st.session_state.current_operation = "Checking Eligibility"
-            criteria = GRANT_PROGRAMS[st.session_state.selected_program]["eligibility_criteria"]
-            results = asyncio.run(check_eligibility(st.session_state.selected_projects, criteria))
-            st.session_state.is_processing = False
-            st.session_state.current_operation = None
-            if results:
-                st.session_state.eligibility_checked_projects.update(st.session_state.selected_projects)
-                save_session_state()
-                st.rerun()
+    #     # Check Eligibility
+    #     if st.sidebar.button("Check Eligibility", use_container_width=True):
+    #         st.session_state.is_processing = True
+    #         st.session_state.current_operation = "Checking Eligibility"
+    #         criteria = GRANT_PROGRAMS[st.session_state.selected_program]["eligibility_criteria"]
+    #         results = asyncio.run(check_eligibility(st.session_state.selected_projects, criteria))
+    #         st.session_state.is_processing = False
+    #         st.session_state.current_operation = None
+    #         if results:
+    #             st.session_state.eligibility_checked_projects.update(st.session_state.selected_projects)
+    #             save_session_state()
+    #             st.rerun()
         
-        # Generate Reports
-        if st.sidebar.button("Generate Reports", use_container_width=True):
-            st.session_state.is_processing = True
-            st.session_state.current_operation = "Generating Reports"
-            questions = GRANT_PROGRAMS[st.session_state.selected_program]["report_questions"]
-            results = asyncio.run(generate_reports(st.session_state.selected_projects, questions))
-            st.session_state.is_processing = False
-            st.session_state.current_operation = None
-            if results:
-                save_session_state()
-                st.rerun()
+    #     # Generate Reports
+    #     if st.sidebar.button("Generate Reports", use_container_width=True):
+    #         st.session_state.is_processing = True
+    #         st.session_state.current_operation = "Generating Reports"
+    #         questions = GRANT_PROGRAMS[st.session_state.selected_program]["report_questions"]
+    #         results = asyncio.run(generate_reports(st.session_state.selected_projects, questions))
+    #         st.session_state.is_processing = False
+    #         st.session_state.current_operation = None
+    #         if results:
+    #             save_session_state()
+    #             st.rerun()
         
-        # Generate Recommendations
-        if st.sidebar.button("Generate Recommendations", use_container_width=True):
-            st.session_state.is_processing = True
-            st.session_state.current_operation = "Generating Recommendations"
-            results = asyncio.run(generate_recommendations(st.session_state.selected_projects))
-            st.session_state.is_processing = False
-            st.session_state.current_operation = None
-            if results:
-                save_session_state()
-                st.rerun()
+    #     # Generate Recommendations
+    #     if st.sidebar.button("Generate Recommendations", use_container_width=True):
+    #         st.session_state.is_processing = True
+    #         st.session_state.current_operation = "Generating Recommendations"
+    #         results = asyncio.run(generate_recommendations(st.session_state.selected_projects))
+    #         st.session_state.is_processing = False
+    #         st.session_state.current_operation = None
+    #         if results:
+    #             save_session_state()
+    #             st.rerun()
         
-        # Comparative Analysis
-        if len(st.session_state.selected_projects) > 1:
-            if st.sidebar.button("Comparative Analysis", use_container_width=True):
-                st.session_state.is_processing = True
-                st.session_state.current_operation = "Generating Comparative Analysis"
-                analysis = asyncio.run(generate_comparative())
-                st.session_state.is_processing = False
-                st.session_state.current_operation = None
-                if analysis:
-                    save_session_state()
-                    st.rerun()
+    #     # Comparative Analysis
+    #     if len(st.session_state.selected_projects) > 1:
+    #         if st.sidebar.button("Comparative Analysis", use_container_width=True):
+    #             st.session_state.is_processing = True
+    #             st.session_state.current_operation = "Generating Comparative Analysis"
+    #             analysis = asyncio.run(generate_comparative())
+    #             st.session_state.is_processing = False
+    #             st.session_state.current_operation = None
+    #             if analysis:
+    #                 save_session_state()
+    #                 st.rerun()
 
     # Add Import Projects section
     st.sidebar.markdown("### Import Projects")
