@@ -4,7 +4,8 @@ from datetime import datetime
 from grant_rag import GrantAssessmentSystem
 
 async def render_chat_interface():
-    """Render the chat interface inside Streamlit."""
+    """Render enhanced chat interface for asking questions about projects"""
+    st.markdown("<h2 class='sub-header'>Project Chat Interface</h2>", unsafe_allow_html=True)
     # Initialize session state if missing
     if "selected_projects" not in st.session_state:
         st.session_state.selected_projects = []
@@ -65,10 +66,7 @@ async def render_chat_interface():
     with input_area:
         user_input = st.chat_input("Type your message here...")
         if user_input:
-            print('0' * 20)
-            st.markdown('0' * 20)
             await handle_user_input(user_input, chat_mode)
-            print('1' * 20)
             st.rerun()
     
 
@@ -76,15 +74,10 @@ async def handle_user_input(user_input, chat_mode):
     """Handle user input for chat interaction."""
     try:
         if chat_mode == "Single Project" and st.session_state.get("chat_project"):
-            print('2' * 20)
-            st.markdown('2' * 20)
             chat_project = st.session_state.chat_project
             st.session_state.messages.append({"role": "user", "content": user_input, "project": chat_project, "timestamp": datetime.now().isoformat()})
-            print('3' * 20)
-            st.markdown('3' * 20)
             with st.spinner("Getting response..."):
-                print('4' * 20)
-                st.markdown('4' * 20)
+                
                 response = await st.session_state.grant_system.ask_project(chat_project, user_input)
                 # response = {
                 #     "answer": "answer",

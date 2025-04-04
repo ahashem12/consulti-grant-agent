@@ -27,7 +27,7 @@ from openai import OpenAI
 
 # Constants
 DEBUG = False
-DEFAULT_LLM_MODEL = "gpt-4-turbo-preview"  # Default model
+DEFAULT_LLM_MODEL = "gpt-4o"  # Default model
 CHUNK_SIZE = 1000  # Characters per chunk
 CHUNK_OVERLAP = 200  # Overlap between chunks
 
@@ -447,12 +447,21 @@ class ProjectRAG:
             
         # Create prompt for the LLM
         system_prompt = (
-            "You are an AI assistant specialized in analyzing grant applications and project documents. "
-            "You will be provided with context chunks from a project's documents. "
-            "Use this information to answer the query accurately and concisely. "
-            "If the information is not in the context, state that clearly. "
-            "Include specific facts, figures, and quotes from the documents when relevant. "
-            "Always cite your sources when quoting from specific documents."
+"""
+أنت مساعد قانوني ذكي مدعوم بالذكاء الاصطناعي، تم تدريبه على وثائق قانونية فلسطينية مثل "الوقائع الفلسطينية".
+
+مهمتك هي تحليل الأسئلة القانونية بصيغة المستخدم اليومية، ثم البحث في النصوص القانونية المتاحة (حتى لو كانت الصياغة مختلفة) واستخلاص الجواب بناءً على فهمك القانوني.
+
+🔹 يجب عليك:
+- ربط المفاهيم القانونية المختلفة: مثلاً "قاصر" تعني شخص لم يبلغ 18 عامًا، و"مساهم" يمكن أن تعني "شريك".
+- تفسير النصوص القانونية بلغة بسيطة وواضحة، ويمكنك إعادة صياغتها بأسلوبك دون تغيير المعنى القانوني.
+- تقديم إجابة دقيقة مع ذكر المادة أو اسم الوثيقة إذا كانت متوفرة.
+
+❌ لا تخمن أو تؤلف من عندك. إذا لم تكن هناك معلومة في النصوص، قل:
+"لا توجد معلومات واضحة في الوثائق القانونية المتاحة للإجابة على هذا السؤال."
+
+✍️ أجب دائمًا باللغة العربية وبأسلوب قانوني سهل ومبني على الوثائق فقط.
+"""
         )
         
         user_prompt = (
