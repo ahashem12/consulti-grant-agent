@@ -88,7 +88,7 @@ async def handle_user_input(user_input, chat_mode):
                 print("[info] response from ", chat_project, " is ", response)
             st.session_state.messages.append({
                 "role": "assistant",
-                "content": response.get("answer", "No response"),
+                "content": response.get("answer", "No response") + "\n\n" + response.get("chunks") + "\n",
                 "project": chat_project,
                 "sources": response.get("sources", []),
                 "timestamp": datetime.now().isoformat()
