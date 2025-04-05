@@ -24,10 +24,10 @@ from diskcache import Cache as PersistentCache
 # LLM
 import openai
 from openai import OpenAI
-
+import streamlit as st
 # Constants
 DEBUG = False
-DEFAULT_LLM_MODEL = "gpt-4-turbo-preview"  # Default model
+DEFAULT_LLM_MODEL = "gpt-4o"  # Default model
 CHUNK_SIZE = 1000  # Characters per chunk
 CHUNK_OVERLAP = 200  # Overlap between chunks
 
@@ -377,7 +377,7 @@ class ProjectRAG:
         return ingestion_results
 
     # ------------------ QUERY & RESPONSE METHODS ------------------
-    async def query_collection(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
+    async def query_collection(self, query: str, n_results: int = 30) -> List[Dict[str, Any]]:
         """
         Query the collection and return the most relevant chunks with metadata
         """
@@ -386,6 +386,7 @@ class ProjectRAG:
             query_hash = hashlib.md5(query.encode()).hexdigest()
             cached = self.cache.get(query_hash)
             if cached:
+                print(f"[INFO] cached: {cached}")
                 if DEBUG:
                     print(f"[DEBUG] Using cached chunks for query: {query}")
                 return cached
@@ -396,7 +397,8 @@ class ProjectRAG:
                 n_results=n_results, 
                 include=["documents", "metadatas", "distances"]
             )
-            
+            print(f"[INFO] results in query_collection: {results}")
+
             if not results["documents"] or not results["documents"][0]:
                 return []
                 
@@ -435,7 +437,11 @@ class ProjectRAG:
         # Format context for the prompt
         formatted_context = ""
         sources = []
+        chunks = ""
+        print(f"[INFO] context_chunks: {len(context_chunks)}")
         for i, chunk in enumerate(context_chunks):
+            chunks += str(chunk["metadata"]["chunk_index"]) + ", "
+            
             formatted_context += f"[CHUNK {i+1}] {chunk['content']}\n\n"
             if "metadata" in chunk and "source" in chunk["metadata"]:
                 source_file = os.path.basename(chunk["metadata"]["source"])
@@ -444,16 +450,17 @@ class ProjectRAG:
                     
         if not formatted_context:
             formatted_context = "No relevant information found in the project documents."
-            
+        print(f"[INFO] formatted_context: {formatted_context}")
         # Create prompt for the LLM
-        system_prompt = (
-            "You are an AI assistant specialized in analyzing grant applications and project documents. "
-            "You will be provided with context chunks from a project's documents. "
-            "Use this information to answer the query accurately and concisely. "
-            "If the information is not in the context, state that clearly. "
-            "Include specific facts, figures, and quotes from the documents when relevant. "
-            "Always cite your sources when quoting from specific documents."
-        )
+        # system_prompt = (
+        #     "You are an AI assistant specialized in analyzing grant applications and project documents. "
+        #     "You will be provided with context chunks from a project's documents. "
+        #     "Use this information to answer the query accurately and concisely. "
+        #     "If the information is not in the context, state that clearly. "
+        #     "Include specific facts, figures, and quotes from the documents when relevant. "
+        #     "Always cite your sources when quoting from specific documents."
+        # )
+        system_prompt = ("You are an AI legal assistant specializing in extracting, analyzing, and summarizing legal information from PDFs and documents. Accurately interpret legal terminology, clauses, and references in contracts, agreements, and statutes. Recognize implicit answers, such as inferring that minors cannot be shareholders when legal capacity is required.Identify key legal elements, including parties involved, jurisdiction, governing law, eligibility criteria, obligations, liabilities, penalties, and precedents. Answer legal questions based on context, even when the document does not provide a direct yes/no response")
         
         user_prompt = (
             f"Query: {query}\n\n"
@@ -478,11 +485,12 @@ class ProjectRAG:
                 "answer": answer,
                 "sources": sources,
                 "timestamp": datetime.now().isoformat(),
-                "context_used": len(context_chunks)
+                "context_used": len(context_chunks),
+                "chunks": chunks
             }
             
             self.response_cache.set(query_hash, result)
-            return result
+            return result 
             
         except Exception as e:
             print(f"[ERROR] Failed to generate response: {e}")
@@ -501,8 +509,7 @@ class ProjectRAG:
         
         # 1. Retrieve relevant chunks
         retrieved_chunks = await self.query_collection(query, n_results=5)
-        
-        # 2. Generate response
+    
         response = await self.generate_response(query, retrieved_chunks)
         
         return response
@@ -885,7 +892,7 @@ class GrantAssessmentSystem:
             # Prepare context for comparison
             context = f"Question asked: {query}\n\nProject responses:\n"
             for project, response in responses.items():
-                context += f"\n{project}:\n{response['answer']}\n"
+                context += f"\n{project}:\n{response['answer']}"
             
             comparison_prompt = f"""Based on the responses from multiple projects to the question "{query}", please provide a comparative analysis.
             Focus on:
