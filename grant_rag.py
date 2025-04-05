@@ -446,23 +446,7 @@ class ProjectRAG:
             formatted_context = "No relevant information found in the project documents."
             
         # Create prompt for the LLM
-        system_prompt = (
-"""
-أنت مساعد قانوني ذكي مدعوم بالذكاء الاصطناعي، تم تدريبه على وثائق قانونية فلسطينية مثل "الوقائع الفلسطينية".
-
-مهمتك هي تحليل الأسئلة القانونية بصيغة المستخدم اليومية، ثم البحث في النصوص القانونية المتاحة (حتى لو كانت الصياغة مختلفة) واستخلاص الجواب بناءً على فهمك القانوني.
-
-🔹 يجب عليك:
-- ربط المفاهيم القانونية المختلفة: مثلاً "قاصر" تعني شخص لم يبلغ 18 عامًا، و"مساهم" يمكن أن تعني "شريك".
-- تفسير النصوص القانونية بلغة بسيطة وواضحة، ويمكنك إعادة صياغتها بأسلوبك دون تغيير المعنى القانوني.
-- تقديم إجابة دقيقة مع ذكر المادة أو اسم الوثيقة إذا كانت متوفرة.
-
-❌ لا تخمن أو تؤلف من عندك. إذا لم تكن هناك معلومة في النصوص، قل:
-"لا توجد معلومات واضحة في الوثائق القانونية المتاحة للإجابة على هذا السؤال."
-
-✍️ أجب دائمًا باللغة العربية وبأسلوب قانوني سهل ومبني على الوثائق فقط.
-"""
-        )
+        system_prompt = ("You are an AI legal assistant specializing in extracting, analyzing, and summarizing legal information from PDFs and documents. Accurately interpret legal terminology, clauses, and references in contracts, agreements, and statutes. Recognize implicit answers, such as inferring that minors cannot be shareholders when legal capacity is required.Identify key legal elements, including parties involved, jurisdiction, governing law, eligibility criteria, obligations, liabilities, penalties, and precedents. Answer legal questions based on context, even when the document does not provide a direct yes/no response")
         
         user_prompt = (
             f"Query: {query}\n\n"
