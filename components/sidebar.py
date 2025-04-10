@@ -19,14 +19,14 @@ async def check_eligibility(project_names, criteria):
         return results
 
 async def check_selection(project_names, criteria):
-    """Check eligibility for selected projects"""
-    with st.spinner("Checking eligibility..."):
+    """Check selected projects"""
+    with st.spinner("Selecting projects that meet the criteria..."):
         results = {}
         for project_name in project_names:
             if project_name in st.session_state.grant_system.projects:
                 result = await st.session_state.grant_system.projects[project_name].check_selected_projects(criteria)
                 results[project_name] = result
-        st.session_state.eligibility_results = results
+        st.session_state.selection_results = results
         return results
     
 async def generate_reports(project_names, questions):
@@ -225,7 +225,7 @@ def render_sidebar():
                 st.rerun()
         
         #Check Selection Projects from Eligable projects
-        if st.sidebar.button("Selected Project", use_container_width=True):
+        if st.sidebar.button("Select Projects", use_container_width=True):
             st.session_state.is_processing = True
             st.session_state.current_operation = "Selecting Projects"
             criteria = GRANT_PROGRAMS[st.session_state.selected_program]["selection_criteria"]

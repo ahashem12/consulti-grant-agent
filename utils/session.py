@@ -19,6 +19,8 @@ def init_session_state():
         st.session_state.selected_projects = []
     if "eligibility_results" not in st.session_state:
         st.session_state.eligibility_results = {}
+    if "selection_results" not in st.session_state:
+        st.session_state.selection_results = {}
     if "reports" not in st.session_state:
         st.session_state.reports = {}
     if "recommendations" not in st.session_state:
@@ -67,6 +69,7 @@ def save_session_state() -> bool:
             "eligibility_checked_projects": list(st.session_state.eligibility_checked_projects),
             "projects_passed_selection": list(st.session_state.projects_passed_selection),
             "eligibility_results": st.session_state.eligibility_results,
+            "selection_results": st.session_state.selection_results,
             "reports": st.session_state.reports,
             "recommendations": st.session_state.recommendations,
             "comparative_analysis": st.session_state.comparative_analysis,
@@ -110,6 +113,7 @@ def load_session_state() -> bool:
             st.session_state.eligibility_checked_projects = set(state_dict.get("eligibility_checked_projects", []))
             st.session_state.projects_passed_selection = set(state_dict.get("projects_passed_selection", []))
             st.session_state.eligibility_results = state_dict.get("eligibility_results", {})
+            st.session_state.selection_results = state_dict.get("selection_results", {})
             st.session_state.reports = state_dict.get("reports", {})
             st.session_state.recommendations = state_dict.get("recommendations", {})
             st.session_state.comparative_analysis = state_dict.get("comparative_analysis")
