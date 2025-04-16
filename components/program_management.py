@@ -1,7 +1,7 @@
 import streamlit as st
 from typing import Dict, Any, List
 import time
-from GrantRAG.config.constants import GRANT_PROGRAMS
+from config.constants import GRANT_PROGRAMS
 
 def render_eligibility_criteria(program: str) -> None:
     """Render the eligibility criteria management interface."""

@@ -2,8 +2,8 @@ import streamlit as st
 import os
 import asyncio
 from datetime import datetime
-from GrantRAG.config.constants import GRANT_PROGRAMS
-from GrantRAG.utils import save_session_state
+from config.constants import GRANT_PROGRAMS
+from utils import save_session_state
 from typing import Dict, Any
 import time
 

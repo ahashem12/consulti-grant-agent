@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from typing import Dict, Any
-from GrantRAG.config.constants import GRANT_PROGRAMS
+from config.constants import GRANT_PROGRAMS
 
 def render_eligibility_results():
     """Render eligibility results in the main area"""
