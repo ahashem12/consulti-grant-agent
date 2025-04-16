@@ -27,7 +27,7 @@ from openai import OpenAI
 import streamlit as st
 # Constants
 DEBUG = False
-DEFAULT_LLM_MODEL = "gpt-4-turbo-preview"  # Default model
+DEFAULT_LLM_MODEL = "gpt-4o"  # Default model
 CHUNK_SIZE = 1000  # Characters per chunk
 CHUNK_OVERLAP = 200  # Overlap between chunks
 
