@@ -1,5 +1,6 @@
 openai>=1.0.0
-chromadb>=0.4.22
+chromadb==0.6.3  # Preferred for production
+pysqlite3==0.4.6; platform_system != "Windows"
 pypdf>=3.17.1
 openpyxl>=3.1.2
 python-docx>=1.0.1

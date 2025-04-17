@@ -22,7 +22,6 @@ GRANT_PROGRAMS = {
         "Local Value Addition": "Does the project add significant value within Palestine by utilizing local resources, labor, and knowledge, and does it aim to reduce reliance on imports or strengthen the local agricultural supply chain?",
         "Ethical Labor Practices": "Does the project adhere to ethical labor practices, respect human rights, and align with fair trade principles?"
     },
- 
         "report_questions": [
             "What is the primary objective of this project?",
             "What problem does the project aim to solve?",

@@ -1,4 +1,16 @@
 import os
+import sys
+import platform
+
+# Handle SQLite import based on environment
+try:
+    __import__('pysqlite3')
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    # Final fallback to built-in sqlite3
+    import sqlite3
+    sys.modules['sqlite3'] = sqlite3
+
 import asyncio
 import json
 import streamlit as st
@@ -6,7 +18,6 @@ from typing import Dict, List, Any, Optional
 import pandas as pd
 from datetime import datetime
 import time
-import sys
 
 # Add the GrantRAG directory to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
