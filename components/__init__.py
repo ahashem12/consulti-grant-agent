@@ -6,6 +6,7 @@ from .settings import render_settings
 from .eligibility_criteria import render_eligibility_results
 from .report_questions import render_reports
 from .recommendations import render_recommendations
+from .selected_projects import render_selected_projects
 
 __all__ = [
     'render_program_management',
@@ -15,5 +16,6 @@ __all__ = [
     'render_eligibility_results',
     'render_settings',
     'render_reports',
-    'render_recommendations'
+    'render_recommendations',
+    'render_selected_projects'
 ] 

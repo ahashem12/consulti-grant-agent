@@ -11,6 +11,17 @@ GRANT_PROGRAMS = {
         "Readiness": "Does the applicant fulfill all readiness checklist items, including a business plan, certificates of registration, required licenses, historical financial statements, signed trade agreements (if available), and other relevant readiness indicators?"
     }
     ,
+        "selection_criteria": {
+        "Environmental and Social Impact": "Does the project demonstrate environmental measures and positive social externalities such as human capital employment, social stability, and inclusion of vulnerable groups?",
+        "Safeguarding Compliance": "Is the investment project compliant with OXFAM’s safeguarding policies?",
+        "Resilience-Based Rationale": "Does the project present a resilience-based investment rationale focused on a specific product and target market?",
+        "Alignment with IBTIKAR Goals": "Does the project align with IBTIKAR’s anticipated impact on resilience, sustainability, and community empowerment?",
+        "Sustainability Practices": "Does the project adhere to sustainable practices such as resource conservation, waste reduction, and minimizing environmental impact, and does it promote sustainable agriculture or green initiatives?",
+        "Risk Management": "Does the project include a well-developed risk assessment and contingency plan that addresses market and operational risks, particularly in the context of political and economic volatility?",
+        "Community Impact": "Does the project have a measurable positive impact on local communities, particularly in job creation, gender inclusion, youth empowerment, and improving living standards, and does it promote equitable access to resources?",
+        "Local Value Addition": "Does the project add significant value within Palestine by utilizing local resources, labor, and knowledge, and does it aim to reduce reliance on imports or strengthen the local agricultural supply chain?",
+        "Ethical Labor Practices": "Does the project adhere to ethical labor practices, respect human rights, and align with fair trade principles?"
+    },
         "report_questions": [
             "What is the primary objective of this project?",
             "What problem does the project aim to solve?",

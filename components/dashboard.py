@@ -10,7 +10,7 @@ def render_project_dashboard():
         return
     
     # Display overall metrics
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric(
@@ -34,6 +34,11 @@ def render_project_dashboard():
         if st.session_state.is_processing:
             st.warning(f"⚡ {st.session_state.current_operation}")
     
+    with col5:
+        st.metric(
+            "Selected Projects",
+            len(st.session_state.projects_passed_selection)
+        )
     # Project Cards
     st.markdown("### Project Status")
     

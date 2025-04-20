@@ -31,7 +31,8 @@ from components import (
     render_eligibility_results,
     render_reports,
     render_recommendations,
-    render_settings
+    render_settings,
+    render_selected_projects
 )
 from utils import (
     init_session_state,
@@ -124,33 +125,37 @@ def main():
     # Create tabs for different views
     tabs = st.tabs([
         "📊 Dashboard",
-        "✅ Eligibility Results",
+        "✅ Eligibility Results",  # Eligibility Results tab
+        "📁 Selected Projects",    # New tab for selected projects, now beside Eligibility Results
         "📝 Reports",
         "💡 Recommendations",
         "🔄 Comparative Analysis",
         "💬 Chat",
         "⚙️ Settings"
     ])
-    
+
     with tabs[0]:
         render_project_dashboard()
-        
+
     with tabs[1]:
         render_eligibility_results()
-        
-    with tabs[2]:
-        render_reports()
-        
+
+    with tabs[2]:  # Updated index for Selected Projects
+        render_selected_projects()  # Call the new rendering function
+
     with tabs[3]:
-        render_recommendations()
-        
+        render_reports()
+
     with tabs[4]:
-        render_comparative_analysis()
-        
+        render_recommendations()
+
     with tabs[5]:
-        render_chat_interface()
-        
+        render_comparative_analysis()
+
     with tabs[6]:
+        render_chat_interface()
+
+    with tabs[7]:
         render_settings()
 
 def render_comparative_analysis():

@@ -573,6 +573,65 @@ class ProjectRAG:
             
         return results
 
+    async def check_selected_projects(self, criteria: Dict[str, str]) -> Dict[str, Any]:
+        """
+        select project's based on specified criteria
+        
+        Args:
+            criteria: Dictionary mapping criteria names to questions
+            
+        Returns:
+            Dictionary with criteria names, questions, answers, and selected results
+        """
+        results = {
+            "project_name": self.project_name,
+            "timestamp": datetime.now().isoformat(),
+            "criteria": [],
+            "selected": True,  # Initially assume selected
+            "summary": ""
+        }
+        
+        for criterion_name, question in criteria.items():
+            print(f"[INFO] Checking criterion '{criterion_name}' for {self.project_name}")
+            
+            # Format the question to explicitly ask about selection
+            selection_question = (
+                f"Based on the project documents, {question} "
+                f"Answer with 'Yes' or 'No' first, then provide supporting evidence."
+            )
+            
+            # Get answer from the RAG system
+            response = await self.ask(selection_question)
+            
+            # Determine eligibility by checking if the answer starts with "Yes"
+            answer = response["answer"].strip()
+            is_selected = answer.lower().startswith("yes")
+            
+            # If any criterion fails, the project is not selected
+            if not is_selected:
+                results["selected"] = False
+                
+            # Add criterion result
+            results["criteria"].append({
+                "name": criterion_name,
+                "question": question,
+                "answer": answer,
+                "meets_criterion": is_selected,
+                "sources": response.get("sources", [])
+            })
+        
+        # Generate summary
+        if results["selected"]:
+            results["summary"] = f"Project '{self.project_name}' meets all selection criteria."
+        else:
+            failed_criteria = [c["name"] for c in results["criteria"] if not c["meets_criterion"]]
+            results["summary"] = (
+                f"Project '{self.project_name}' does not meet the following criteria: "
+                f"{', '.join(failed_criteria)}."
+            )
+            
+        return results
+    
     async def generate_detailed_report(self, questions: List[str]) -> Dict[str, Any]:
         """
         Generate a detailed report by answering a list of questions about the project
@@ -1080,6 +1139,6 @@ async def main():
     print("[INFO] Generating comparative analysis...")
     analysis = await system.generate_comparative_analysis()
     print("[INFO] Analysis completed")
-
+   
 if __name__ == "__main__":
     asyncio.run(main()) 
