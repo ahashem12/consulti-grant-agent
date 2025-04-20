@@ -38,7 +38,8 @@ def render_selected_projects():
                         "Criterion": criterion["name"],
                         "Question": criterion["question"],
                         "Status": "✅ Met" if criterion["meets_criterion"] else "❌ Not Met",
-                        "Evidence": criterion["answer"]
+                        "Evidence": criterion["answer"],
+                        "Action_needed": criterion["action_needed"]
                     })
 
                 if criteria_data:

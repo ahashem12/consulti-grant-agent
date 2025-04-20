@@ -575,52 +575,62 @@ class ProjectRAG:
 
     async def check_selected_projects(self, criteria: Dict[str, str]) -> Dict[str, Any]:
         """
-        select project's based on specified criteria
-        
+        Select projects based on specified criteria and return evaluation with actions needed.
+
         Args:
             criteria: Dictionary mapping criteria names to questions
-            
+
         Returns:
-            Dictionary with criteria names, questions, answers, and selected results
+            Dictionary with criteria names, questions, answers, selection status,
+            and actions needed to meet criteria
         """
         results = {
             "project_name": self.project_name,
             "timestamp": datetime.now().isoformat(),
             "criteria": [],
-            "selected": True,  # Initially assume selected
+            "selected": True,  # Assume selected unless a criterion fails
             "summary": ""
         }
-        
+
         for criterion_name, question in criteria.items():
             print(f"[INFO] Checking criterion '{criterion_name}' for {self.project_name}")
-            
-            # Format the question to explicitly ask about selection
+
+            # Format selection question
             selection_question = (
                 f"Based on the project documents, {question} "
                 f"Answer with 'Yes' or 'No' first, then provide supporting evidence."
             )
-            
-            # Get answer from the RAG system
+
             response = await self.ask(selection_question)
-            
-            # Determine eligibility by checking if the answer starts with "Yes"
             answer = response["answer"].strip()
             is_selected = answer.lower().startswith("yes")
-            
+
             # If any criterion fails, the project is not selected
             if not is_selected:
                 results["selected"] = False
-                
-            # Add criterion result
+
+            # Get action needed if the criterion is not met
+            if not is_selected:
+                action_prompt = (
+                    f"The project does not meet the following criterion: '{question}'. "
+                    f"What specific actions should be taken to meet this requirement?"
+                )
+                action_response = await self.ask(action_prompt)
+                action_needed = action_response["answer"].strip()
+            else:
+                action_needed = "No action needed."
+
+            # Add full criterion result
             results["criteria"].append({
                 "name": criterion_name,
                 "question": question,
                 "answer": answer,
                 "meets_criterion": is_selected,
-                "sources": response.get("sources", [])
+                "sources": response.get("sources", []),
+                "action_needed": action_needed
             })
-        
-        # Generate summary
+
+        # Summary
         if results["selected"]:
             results["summary"] = f"Project '{self.project_name}' meets all selection criteria."
         else:
@@ -629,7 +639,7 @@ class ProjectRAG:
                 f"Project '{self.project_name}' does not meet the following criteria: "
                 f"{', '.join(failed_criteria)}."
             )
-            
+
         return results
     
     async def generate_detailed_report(self, questions: List[str]) -> Dict[str, Any]:
